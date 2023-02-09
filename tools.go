@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"io/fs"
 	"log"
 	"net/http"
 	"os"
@@ -76,15 +77,19 @@ func (t *Tools) UploadFile(r *http.Request, uploadDir string, rename ...bool) ([
 	if t.MaxFileSize == 0 {
 		t.MaxFileSize = 1024 * 1024 * 1024  // 1 gb approximately
 	}
-	err := r.ParseMultipartForm(int64(t.MaxFileSize))
-	if err != nil {
+	if err := r.ParseMultipartForm(int64(t.MaxFileSize)); err != nil {
 		log.Println(r)
 		log.Fatal("Fatal:", err)
 		return nil, errors.New(err.Error())
 	}
 	
+	if err := t.CreateDirIfNotExists(uploadDir); err != nil {
+		return nil, err
+	}
+
 	for _, fHeaders := range r.MultipartForm.File {
 		for _, hdrs := range fHeaders {
+			var err error
 			upLoadedFiles, err = func(uploadedFiles []*UploadedFile) ([]*UploadedFile, error) {
 				inFile, err := hdrs.Open()
 				if err != nil {
@@ -148,4 +153,23 @@ func (t *Tools) UploadFile(r *http.Request, uploadDir string, rename ...bool) ([
 	}
 
 	return upLoadedFiles, nil
+}
+
+
+// CreateDirIfNotExists creates a direcrtory along with all needed parent directories if they dont exist.
+// Function does noting if the directory alreay exists.
+func (t *Tools)  CreateDirIfNotExists(path string) error {
+	if len(strings.TrimSpace(path)) < 1 {
+		return errors.New("invalid path")
+	}
+
+	if _, err := os.Stat(path); errors.Is(err, fs.ErrNotExist) {
+		const mode = 0755
+		err := os.MkdirAll(path, mode)
+		if err != nil {
+			return err
+		}
+	}
+
+	return nil
 }
