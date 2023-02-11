@@ -157,7 +157,7 @@ func (t *Tools) UploadFile(r *http.Request, uploadDir string, rename ...bool) ([
 }
 
 
-// CreateDirIfNotExists creates a direcrtory along with all needed parent directories if they dont exist.
+// CreateDirIfNotExists creates a directory along with all needed parent directories if they dont exist.
 // Function does noting if the directory alreay exists.
 func (t *Tools)  CreateDirIfNotExists(path string) error {
 	if len(strings.TrimSpace(path)) < 1 {
