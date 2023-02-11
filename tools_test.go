@@ -10,6 +10,7 @@ import (
 	"mime/multipart"
 	"net/http/httptest"
 	"os"
+	"strings"
 	"sync"
 	"testing"
 )
@@ -93,7 +94,6 @@ func TestToolsUploadFile(t *testing.T) {
 	}
 }
 
-
 func TestToolsUploadOneFile(t *testing.T) {
 	pr, pw := io.Pipe()
 	writer := multipart.NewWriter(pw)
@@ -140,8 +140,7 @@ func TestToolsUploadOneFile(t *testing.T) {
 	os.Remove(nf)
 }
 
-
-func TestCreateDirIfNotExists(t *testing.T) {
+func TestToolsCreateDirIfNotExists(t *testing.T) {
 	var testTool Tools
 	d := "./testdata/mydir"
 	os.RemoveAll(d)
@@ -153,4 +152,42 @@ func TestCreateDirIfNotExists(t *testing.T) {
 		t.Error("expected the directory to exist ", err)
 	}
 	os.RemoveAll(d)
+}
+
+var slugTests = []struct {
+	name        string
+	s           string
+	expected    string
+	errExpected bool
+}{
+	{name: "valid string", s: "Now is the time for black", expected: "now-is-the-time-for-black", errExpected: false},
+	{name: "empty string", s: "", expected: "", errExpected: true},
+	{name: "complex string", s: "NOW IS THE time&$___&$& for><><>&!!black%^%&%*&)123", expected: "now-is-the-time-for-black", errExpected: false},
+	{name: "thai string", s: "สวัสดีชาวโลก", expected: "", errExpected: true,},
+	{name: "thai string and roman characters", s: "hello blackสวัสดีชาวโลก", expected: "hello-black", errExpected: false},
+}
+
+func TestToolsSlugify(t *testing.T) {
+	var tools Tools
+	for _, e := range slugTests {
+		slug, err := tools.Slugify(e.s)
+		if err != nil {
+			if e.errExpected {
+				continue
+			}
+			if !e.errExpected {
+				t.Errorf("%s: error received when none expected %s", e.name, err)
+				continue
+			}
+		}
+		if !e.errExpected && !strings.EqualFold(slug, e.expected) {
+			t.Errorf("%s after slugify expected %s got %s", e.name, e.expected, slug)
+			continue
+		}
+
+		if e.errExpected {
+			t.Errorf("%s error expected none received", e.name)
+			continue
+		}
+	}
 }

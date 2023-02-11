@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 )
 
@@ -172,4 +173,23 @@ func (t *Tools)  CreateDirIfNotExists(path string) error {
 	}
 
 	return nil
+}
+
+// Slugify is a very simple means of creating a slug from a string.
+func (t *Tools) Slugify(s string) (string, error) {
+	if len(s) < 1 {
+		return "", errors.New("empty strings are not permitted")
+	}
+
+	re, err := regexp.Compile(`[^a-z/d]+`) // allow any lower case alphabets or digits
+	if err != nil {
+		return "", errors.New(("fatal server error : " + err.Error()))
+	}
+
+	slug := strings.Trim(re.ReplaceAllString(strings.ToLower(s), "-"), "-")
+	if len(slug) <= 0 {
+		return "", errors.New("after removing characters, slug is of zero length")
+	}
+
+	return slug, nil
 }
