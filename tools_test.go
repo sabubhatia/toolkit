@@ -8,6 +8,7 @@ import (
 	"io"
 	"io/fs"
 	"mime/multipart"
+	"net/http"
 	"net/http/httptest"
 	"os"
 	"strings"
@@ -189,5 +190,30 @@ func TestToolsSlugify(t *testing.T) {
 			t.Errorf("%s error expected none received", e.name)
 			continue
 		}
+	}
+}
+
+func TestToolsDownloadStaticFile(t *testing.T) {
+	rr := httptest.NewRecorder()
+	r, err := http.NewRequest(http.MethodGet, "/", nil)
+	if err != nil {
+		t.Errorf(err.Error())
+		return
+	}
+
+	var testTools Tools
+	testTools.DownLoadStaticFile(rr, r, "./testdata", "mypic2002.jpg", "sabu.jpg") 
+	res := rr.Result()
+	defer res.Body.Close()
+	if res.Header[http.CanonicalHeaderKey("content-length")][0] != "259392" {
+		t.Errorf("wrong content length of %s", res.Header[http.CanonicalHeaderKey("content-length")][0])
+	}
+	if res.Header[http.CanonicalHeaderKey("content-disposition")][0] != "attachment; filename=\"sabu.jpg\"" {
+		t.Error("wrong content-disposition of ", res.Header[http.CanonicalHeaderKey("content-disposition")][0])
+	}
+
+	b, err := io.ReadAll(res.Body)
+	if err != nil || len(b) < 1 {
+		t.Error("unecpected failure on reading result body")
 	}
 }
