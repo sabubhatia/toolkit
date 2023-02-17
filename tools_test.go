@@ -1,6 +1,7 @@
 package toolkit
 
 import (
+	"bytes"
 	"errors"
 	"fmt"
 	"image"
@@ -11,6 +12,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"sort"
 	"strings"
 	"sync"
 	"testing"
@@ -215,5 +217,168 @@ func TestToolsDownloadStaticFile(t *testing.T) {
 	b, err := io.ReadAll(res.Body)
 	if err != nil || len(b) < 1 {
 		t.Error("unecpected failure on reading result body")
+	}
+}
+
+var testJSON = []struct {
+	name string
+	json string
+	errExpected bool
+	maxSize int
+	allowUnknown bool
+} {
+	{name: "good json", json:`{"foo": "bar"}`, errExpected: false, maxSize: 1024, allowUnknown: false},
+	{name: "badly formatted json", json:`{"foo"}`, errExpected: true, maxSize: 1024, allowUnknown: false},
+	{name: "incorrect type", json:`{"foo": 1}`, errExpected: true, maxSize: 1024, allowUnknown: false},
+	{name: "two json files", json:`{"foo": "bar"} {"alpha" : "beta"}`, errExpected: true, maxSize: 1024, allowUnknown: false},
+	{name: "empty body", json:``, errExpected: true, maxSize: 1024, allowUnknown: false},
+	{name: "json syntax error", json:`{"foo": "bar}`, errExpected: true, maxSize: 1024, allowUnknown: false},
+	{name: "unknown field", json:`{"fooXYZ": "bar"}`, errExpected: true, maxSize: 1024, allowUnknown: false},
+	{name: "allow unknown fields in JSOn", json:`{"foo1": "bar"}`, errExpected: false, maxSize: 1024, allowUnknown: true},
+	{name: "missing field name", json:`{jack: "bar"}`, errExpected: true, maxSize: 1024, allowUnknown: true},
+	{name: "file too large", json:`{"foo": "bar"}`, errExpected: true, maxSize: 5, allowUnknown: false},
+	{name: "not json", json:`Hello, World`, errExpected: true, maxSize: 1024, allowUnknown: false},
+
+}
+
+func TestToolsReadJSON(t *testing.T) {
+	var testTool Tools
+	for _, e := range testJSON {
+		rr := httptest.NewRecorder()
+		r, err := http.NewRequest(http.MethodPost, "/", bytes.NewReader([]byte(e.json)))
+		if err != nil {
+			t.Errorf("cannot create reader. %s", err.Error())
+			continue
+		}
+		r.Header.Set("content-type", "application/json")
+		testTool.MaxJSONSize = e.maxSize
+		testTool.AllowUnknownFields = e.allowUnknown
+		var decodedJson struct {
+			Foo string `json:"foo"`
+		}
+		err = testTool.ReadJSON(rr, r, &decodedJson)
+		if err == nil && e.errExpected {
+			t.Errorf("%s: error expected, none received", e.name)
+			continue
+		}
+		if err != nil && !e.errExpected {
+			t.Errorf("%s: error was not expected but received error %s", e.name, err.Error())
+			continue
+		}
+		r.Body.Close()
+
+	} 
+}
+
+func TestToolsWriteJSON(t *testing.T) {
+	var testTools Tools
+	payload := JSONResponse{
+		Error: false,
+		Message: "Bar",
+	}
+
+	headers := make(http.Header)
+	headers.Add("foo", "bar")
+	rr := httptest.NewRecorder()
+	err := testTools.WriteJSON(rr, http.StatusOK, payload, headers)
+	if err != nil {
+		t.Errorf(err.Error())
+	}
+
+	// test the headers. Given we have content type set in the method we will get 1 more than we send in
+	if len(rr.Result().Header) != len(headers) + 1 {
+		t.Errorf("expected length of headers %d, received %d", len(headers) + 1, len(rr.Result().Header))
+		return
+	}
+
+	// We will range over what we passed in to figure out if everything has come back. What comes
+	// back is one more than what we send in. Hence ranging over what we sent should not be expected to throw any 
+	// errors
+	rhdr := rr.Result().Header
+	for k, v := range headers {
+		// does the header exist in the results header
+		vr, ok := rhdr[k]
+		if !ok {
+			t.Errorf("header %s expected to exist but not found", k)
+			continue
+		}
+		// is the number of values in the header same as the original
+		if len(v) != len(vr) {
+			t.Errorf("expected length of value slice to be %d received %d", len(v), len(vr))
+			continue
+		}
+		sort.Strings(vr)
+		// Does every value in the original header exist in the result 
+		for _, s := range v {
+			 i := sort.SearchStrings(vr, s)
+			 if i >= len(vr) {
+				t.Errorf("value %s expected to exist in the header map for key %s but does not", s, k)
+				break
+			 }
+		}
+	}	
+
+	// Now read the returned request and read the json from it into the data structure.
+	// This should result in an identical payload.
+	body := rr.Result().Body
+	r, err := http.NewRequest(http.MethodPost, "/", body) // posts the json 
+	if err != nil {
+		t.Errorf(err.Error())
+		return
+	}
+
+	var resultPayload JSONResponse
+	rr = httptest.NewRecorder()
+	r.Header.Set("content-type", "application/json")
+	err = testTools.ReadJSON(rr, r, &resultPayload)
+	if err != nil {
+		t.Errorf(err.Error())
+		return
+	}
+	if payload != resultPayload {
+		t.Errorf("expected %+v, Received %+v", payload, resultPayload)
+	}
+	
+}
+
+func TestToolsErrJSON(t * testing.T) {
+	var testTool Tools
+
+	errRes := JSONResponse {
+		Error: true,
+		Message: "This is a test error",
+	}
+	rr := httptest.NewRecorder()
+	statusCode := http.StatusUnauthorized
+	contentType := "application/json"
+	terr := fmt.Errorf("%s", errRes.Message)
+	err := testTool.ErrorJSON(rr, terr, statusCode)
+	if err != nil {
+		t.Errorf("unexpected error %s", err.Error())
+		return
+	}
+
+	if rr.Result().Header.Get("content-type") != contentType {
+		t.Errorf("Expected content type %s received %s", contentType, rr.Result().Header.Get("content-type"))
+	}
+
+	if rr.Result().StatusCode != statusCode{
+		t.Errorf("Expected staus code %d received %d", statusCode, rr.Result().StatusCode)
+	}
+
+	r, err := http.NewRequest(http.MethodPost, "/", rr.Result().Body)
+	if err != nil {
+		t.Errorf(err.Error())
+		return
+	}
+	r.Header.Set("content-type", contentType)
+	var jErr JSONResponse
+	if err := testTool.ReadJSON(httptest.NewRecorder(), r, &jErr); err != nil {
+		t.Errorf(err.Error())
+		return
+	}
+
+	if errRes != jErr {
+		t.Errorf("expected %+v received %+v", errRes, jErr)
 	}
 }
