@@ -8,6 +8,7 @@ import (
 	"image/jpeg"
 	"io"
 	"io/fs"
+	"io/ioutil"
 	"mime/multipart"
 	"net/http"
 	"net/http/httptest"
@@ -380,5 +381,51 @@ func TestToolsErrJSON(t * testing.T) {
 
 	if errRes != jErr {
 		t.Errorf("expected %+v received %+v", errRes, jErr)
+	}
+}
+
+type RoundTripFunc func(req *http.Request) *http.Response 
+
+func (f RoundTripFunc) RoundTrip(req *http.Request) (*http.Response, error) {
+	return f(req), nil
+}
+
+func NewTestClient(fn RoundTripFunc) *http.Client {
+	return &http.Client{
+		Transport: fn,
+	}
+}
+func TestToolsPushJSONToRemote(t *testing.T) {
+
+	client := NewTestClient(func(req *http.Request) *http.Response {
+		// Test request parametwrs.
+		return &http.Response{
+			StatusCode: http.StatusOK,
+			Body: ioutil.NopCloser(bytes.NewBufferString("ok")),
+			Header: make(http.Header),
+		}
+	})
+
+	var testTool Tools
+	foo := struct {
+		Bar string `json:"bar"`
+	} {
+		Bar: "bar",
+	}
+	resp, _, err := testTool.PushJSONToRemote("http://sabu.com/testme/", foo, client)
+	if err != nil {
+		t.Errorf("unexpected error pushing JSON to remote %+v", err)
+		return
+	}
+
+	defer resp.Body.Close()
+
+	b, err := io.ReadAll(resp.Body)
+	if err != nil {
+		t.Error(err)
+		return
+	}
+	if string(b) != "OK" {
+		t.Errorf("expected \"OK\" received %s", string(b))
 	}
 }
