@@ -219,7 +219,7 @@ func (t *Tools) ReadJSON(w http.ResponseWriter, r *http.Request, data interface{
 	}
 
 	if r.Header.Get("content-type") != "application/json" {
-		return fmt.Errorf("unexpected content type of \"%s\" ", r.Header.Get("content-type"))
+		return fmt.Errorf(`unexpected content type of "%s"`, r.Header.Get("content-type"))
 	}
 	r.Body = http.MaxBytesReader(w, r.Body, int64(maxJSONSize))
 
@@ -328,14 +328,12 @@ func (t *Tools) PushJSONToRemote(uri string, data interface{}, client ...*http.C
     if err != nil {
 		return nil, http.StatusInternalServerError, err
 	}
-
-
+	req.Header.Set("content-type", "application/json")
+	
 	resp, err := httpClient.Do(req)
 	if err != nil {
 		return nil, 0, err
 	}
-
-	defer resp.Body.Close()
 	
 	return resp, resp.StatusCode, nil
 
