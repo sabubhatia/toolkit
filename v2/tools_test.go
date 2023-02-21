@@ -205,7 +205,7 @@ func TestToolsDownloadStaticFile(t *testing.T) {
 	}
 
 	var testTools Tools
-	testTools.DownLoadStaticFile(rr, r, "./testdata", "mypic2002.jpg", "sabu.jpg") 
+	testTools.DownLoadStaticFile(rr, r, "./testdata/mypic2002.jpg", "sabu.jpg") 
 	res := rr.Result()
 	defer res.Body.Close()
 	if res.Header[http.CanonicalHeaderKey("content-length")][0] != "259392" {
@@ -425,7 +425,7 @@ func TestToolsPushJSONToRemote(t *testing.T) {
 		t.Error(err)
 		return
 	}
-	if string(b) != "OK" {
-		t.Errorf("expected \"OK\" received %s", string(b))
+	if string(b) != "ok" {
+		t.Errorf("expected \"ok\" received %s", string(b))
 	}
 }
