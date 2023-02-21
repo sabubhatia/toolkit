@@ -425,7 +425,7 @@ func TestToolsPushJSONToRemote(t *testing.T) {
 		t.Error(err)
 		return
 	}
-	if string(b) != "OK" {
-		t.Errorf("expected \"OK\" received %s", string(b))
+	if string(b) != "ok" {
+		t.Errorf("expected \"ok\" received %s", string(b))
 	}
 }
